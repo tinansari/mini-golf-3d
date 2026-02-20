@@ -13,10 +13,17 @@ import * as THREE from "three";
  * and compares the ball's center to that radius. This is a lightweight
  * approximation suitable for our mini-golf demo.
  */
-export function createCollisionDetector(course) {
+/**
+ * createCollisionDetector(course, options)
+ * options:
+ *   - maxEntrySpeed: number | undefined  (if provided, a ball moving faster than
+ *     this will NOT be considered to have "entered" the hole)
+ */
+export function createCollisionDetector(course, options = {}) {
+	const maxEntrySpeed = typeof options.maxEntrySpeed === "number" ? options.maxEntrySpeed : 3.0;
 	if (!course) {
 		console.warn("createCollisionDetector: course is falsy");
-		return { check: () => false, reset: () => {} };
+		return { check: () => ({ collided: false, entered: false }), reset: () => {} };
 	}
 
 	// Try common name variants first
@@ -44,7 +51,7 @@ export function createCollisionDetector(course) {
 	holeBox.getSize(holeSize);
 	const holeRadius = Math.max(holeSize.x, holeSize.z) / 2;
 
-	// Track previous collision state so we log every time the ball *enters*
+		// Track previous collision state so we log every time the ball *enters*
 	// the hole (transition from not-collided -> collided). This avoids
 	// spamming logs each frame while the ball remains overlapping the hole,
 	// but still logs every separate collision event.
@@ -56,8 +63,10 @@ export function createCollisionDetector(course) {
 		 * Returns true when collision is detected. Logs an entry message each time
 		 * the ball transitions from non-colliding to colliding (i.e. each entrance).
 		 */
-			check(ballMesh) {
-				if (!ballMesh) return { collided: false, entered: false };
+				// ballVelocity (optional) should be a THREE.Vector3 representing current
+				// ball velocity; used to decide whether the ball is slow enough to enter.
+				check(ballMesh, ballVelocity) {
+					if (!ballMesh) return { collided: false, entered: false };
 
 			const ballBox = new THREE.Box3().setFromObject(ballMesh);
 			const ballCenter = new THREE.Vector3();
@@ -68,13 +77,24 @@ export function createCollisionDetector(course) {
 
 			const dist = ballCenter.distanceTo(holeCenter);
 
-			// A small margin to account for pivots/mesh origin differences
-			const margin = 0.01;
+					// A small margin to account for pivots/mesh origin differences
+					const margin = 0.01;
 
-			// Overlap-based collision (ball and hole treated as circles in XZ plane)
-					const collided = dist <= holeRadius + ballRadius - margin;
+					// Overlap-based collision (ball and hole treated as circles in XZ plane)
+					const geomOverlap = dist <= holeRadius + ballRadius - margin;
 
-					const entered = collided && !_prevCollided;
+					// Compute speed (if velocity provided). If no velocity provided, assume
+					// slow (so that older code paths that didn't pass velocity still work).
+					const speed = ballVelocity && typeof ballVelocity.length === "function" ? ballVelocity.length() : 0;
+
+					// Only count an entrance if the ball is overlapping AND its speed is low
+					// enough to realistically enter the hole.
+					const collided = geomOverlap;
+					let entered = false;
+					if (collided && speed <= maxEntrySpeed) {
+						entered = !_prevCollided; // true only on the transition
+					}
+
 					if (entered) {
 						console.log(
 							"Collision detected: ball entered hole (dist=",
@@ -83,12 +103,16 @@ export function createCollisionDetector(course) {
 							holeRadius.toFixed(3),
 							", ballRadius=",
 							ballRadius.toFixed(3),
+							", speed=",
+							speed.toFixed(3),
 							")"
 						);
 					}
 
-					// Update previous state so future entrances are detected again
-					_prevCollided = collided;
+					// Update previous collision geometry state. Note: we use geomOverlap so
+					// that a fast pass will still reset the _prevCollided state when it
+					// leaves the hole area (so a later slow pass can enter).
+					_prevCollided = geomOverlap;
 
 					return { collided, entered };
 		},

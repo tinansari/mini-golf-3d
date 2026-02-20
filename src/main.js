@@ -147,43 +147,57 @@ if (ballMesh && input.isAiming) {
       if (collisionDetector) {
         const res = collisionDetector.check(ballMesh);
         if (res.entered) {
-          // Stop and hide the ball, then show a small DOM alert above its screen
-          ball.velocity.set(0, 0, 0);
+            // Log the ball velocity (vector and scalar speed)
+            const speed = ball.velocity.length();
+            console.log(
+              "Ball velocity on collision:",
+              ball.velocity.clone(),
+              "speed=",
+              speed.toFixed(3)
+            );
 
-          // compute screen pos of ball before hiding
-          const screenPos = ballMesh.position.clone();
-          screenPos.project(camera);
-          const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-          const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+            // Only count as a win if speed <= 35
+            if (speed <= 35) {
+              // Stop and hide the ball, then show a small DOM alert above its screen
+              ball.velocity.set(0, 0, 0);
 
-          // hide the mesh
-          ballMesh.visible = false;
+              // compute screen pos of ball before hiding
+              const screenPos = ballMesh.position.clone();
+              screenPos.project(camera);
+              const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+              const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
 
-          // remove existing alert if any
-          const existing = document.getElementById("win-alert");
-          if (existing) existing.remove();
+              // hide the mesh
+              ballMesh.visible = false;
 
-          const div = document.createElement("div");
-          div.id = "win-alert";
-          div.textContent = `You won in ${strokes} strokes!`;
-          Object.assign(div.style, {
-            position: "absolute",
-            left: `${Math.round(x)}px`,
-            top: `${Math.max(10, Math.round(y - 30))}px`, // place above the ball
-            transform: "translate(-50%, -100%)",
-            background: "rgba(0,0,0,0.8)",
-            color: "#fff",
-            padding: "8px 12px",
-            borderRadius: "6px",
-            fontFamily: "sans-serif",
-            zIndex: 1000,
-          });
-          document.body.appendChild(div);
+              // remove existing alert if any
+              const existing = document.getElementById("win-alert");
+              if (existing) existing.remove();
 
-          // auto-remove after 4 seconds
-          setTimeout(() => {
-            div.remove();
-          }, 4000);
+              const div = document.createElement("div");
+              div.id = "win-alert";
+              div.textContent = `You won in ${strokes} strokes!`;
+              Object.assign(div.style, {
+                position: "absolute",
+                left: `${Math.round(x)}px`,
+                top: `${Math.max(10, Math.round(y - 30))}px`, // place above the ball
+                transform: "translate(-50%, -100%)",
+                background: "rgba(0,0,0,0.8)",
+                color: "#fff",
+                padding: "8px 12px",
+                borderRadius: "6px",
+                fontFamily: "sans-serif",
+                zIndex: 1000,
+              });
+              document.body.appendChild(div);
+
+              // auto-remove after 4 seconds
+              setTimeout(() => {
+                div.remove();
+              }, 4000);
+            } else {
+              console.log("Collision ignored: speed > 35 (", speed.toFixed(3), ")");
+            }
         }
       }
 
