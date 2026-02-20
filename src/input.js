@@ -12,7 +12,7 @@ export function initInput({ camera, domElement, controls, groundY = 0 }) {
 
   // --- tunables ---
   const MAX_DRAG = 2.5;      // world units; clamp drag length
-  const POWER_SCALE = 6.0;   // maps drag length -> initial speed
+  const POWER_SCALE = 21.0;   // maps drag length -> initial speed
 
   // --- helpers ---
   const raycaster = new THREE.Raycaster();
@@ -90,7 +90,7 @@ export function initInput({ camera, domElement, controls, groundY = 0 }) {
     const dir = drag.normalize();
 
     // Speed proportional to clamped length
-    const speed = clampedLen * POWER_SCALE;
+    const speed = dragLen * POWER_SCALE;
 
     shotVelocity.copy(dir).multiplyScalar(speed);
     shotRequested = true;
