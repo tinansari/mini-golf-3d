@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { initInput } from "./input.js";
 import { loadCourse } from "./scene.js";
+import { createCollisionDetector } from "./collision.js";
 
 // --- Scene Setup ---
 const scene = new THREE.Scene();
@@ -40,6 +41,8 @@ const ball = {
   velocity: new THREE.Vector3(0, 0, 0),
 };
 
+let collisionDetector = null;
+
 // --- Load Course + Extract Blender Ball ---
 loadCourse(scene, ({ course, ballMesh: loadedBall }) => {
     ballMesh = loadedBall;
@@ -66,6 +69,9 @@ loadCourse(scene, ({ course, ballMesh: loadedBall }) => {
     ballMesh.scale.copy(worldScale);
 
     startPosition.copy(ballMesh.position);
+
+      // create collision detector for this course
+      collisionDetector = createCollisionDetector(course);
 
   });  
 
@@ -137,6 +143,50 @@ if (ballMesh && input.isAiming) {
     // Move ball
     ballMesh.position.addScaledVector(ball.velocity, dt);
 
+      // Check collision with hole (check returns { collided, entered })
+      if (collisionDetector) {
+        const res = collisionDetector.check(ballMesh);
+        if (res.entered) {
+          // Stop and hide the ball, then show a small DOM alert above its screen
+          ball.velocity.set(0, 0, 0);
+
+          // compute screen pos of ball before hiding
+          const screenPos = ballMesh.position.clone();
+          screenPos.project(camera);
+          const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+          const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+
+          // hide the mesh
+          ballMesh.visible = false;
+
+          // remove existing alert if any
+          const existing = document.getElementById("win-alert");
+          if (existing) existing.remove();
+
+          const div = document.createElement("div");
+          div.id = "win-alert";
+          div.textContent = `You won in ${strokes} strokes!`;
+          Object.assign(div.style, {
+            position: "absolute",
+            left: `${Math.round(x)}px`,
+            top: `${Math.max(10, Math.round(y - 30))}px`, // place above the ball
+            transform: "translate(-50%, -100%)",
+            background: "rgba(0,0,0,0.8)",
+            color: "#fff",
+            padding: "8px 12px",
+            borderRadius: "6px",
+            fontFamily: "sans-serif",
+            zIndex: 1000,
+          });
+          document.body.appendChild(div);
+
+          // auto-remove after 4 seconds
+          setTimeout(() => {
+            div.remove();
+          }, 4000);
+        }
+      }
+
     // Friction
     const k = 2.0;
     ball.velocity.multiplyScalar(Math.max(0, 1 - k * dt));
@@ -159,6 +209,10 @@ window.addEventListener("keydown", (e) => {
         ballMesh.position.copy(startPosition);
         ball.velocity.set(0, 0, 0);
         strokes = 0;
+        // restore visibility and remove any win alert
+        ballMesh.visible = true;
+        const existing = document.getElementById("win-alert");
+        if (existing) existing.remove();
         console.log("Reset. Strokes:", strokes);
       }
     }
