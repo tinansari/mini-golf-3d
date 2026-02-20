@@ -17,6 +17,9 @@ camera.position.set(0, 3, 8);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
+// set sky-like background color
+const SKY_COLOR = 0x87ceeb; // light sky blue
+renderer.setClearColor(SKY_COLOR, 1);
 document.body.appendChild(renderer.domElement);
 
 // --- Controls ---
@@ -25,10 +28,17 @@ controls.enableDamping = true;
 controls.enableRotate = false; // no changing angle for now
 
 // --- Lighting ---
+// give the scene a sky-like background
+scene.background = new THREE.Color(SKY_COLOR);
+
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(5, 10, 5);
 scene.add(light);
-scene.add(new THREE.AmbientLight(0xffffff, 0.3));
+
+// add a hemisphere light for nicer sky/ground lighting
+scene.add(new THREE.HemisphereLight(0x87ceeb, 0x444444, 0.35));
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 
 let startPosition = new THREE.Vector3();
 
