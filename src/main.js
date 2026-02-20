@@ -29,8 +29,12 @@ light.position.set(5, 10, 5);
 scene.add(light);
 scene.add(new THREE.AmbientLight(0xffffff, 0.3));
 
+let startPosition = new THREE.Vector3();
+
 // --- Ball State ---
 let ballMesh = null;
+
+let strokes = 0;
 
 const ball = {
   velocity: new THREE.Vector3(0, 0, 0),
@@ -60,6 +64,9 @@ loadCourse(scene, ({ course, ballMesh: loadedBall }) => {
     ballMesh.position.copy(worldPos);
     ballMesh.quaternion.copy(worldQuat);
     ballMesh.scale.copy(worldScale);
+
+    startPosition.copy(ballMesh.position);
+
   });  
 
 // --- Input System ---
@@ -70,6 +77,14 @@ const input = initInput({
   groundY: 0,
 });
 
+// --- Aim Line (visual feedback while dragging) ---
+const aimLinePoints = [new THREE.Vector3(), new THREE.Vector3()];
+const aimLineGeom = new THREE.BufferGeometry().setFromPoints(aimLinePoints);
+const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+const aimLine = new THREE.Line(aimLineGeom, aimLineMat);
+aimLine.visible = false;
+scene.add(aimLine);
+
 // --- Animation ---
 const clock = new THREE.Clock();
 const shotVel = new THREE.Vector3();
@@ -79,13 +94,45 @@ function animate() {
 
   const dt = clock.getDelta();
 
+// --- Aim Line (top-center of ball mesh, visual clamp only) ---
+if (ballMesh && input.isAiming) {
+    // True top-center of the mesh (handles weird pivots)
+    const box = new THREE.Box3().setFromObject(ballMesh);
+    const center = new THREE.Vector3();
+    box.getCenter(center);
+    const start = new THREE.Vector3(center.x, box.max.y, center.z);
+  
+    // Raw drag (unlimited power in input.js)
+    const dragRaw = new THREE.Vector3().subVectors(input.startPoint, input.currPoint);
+    dragRaw.y = 0;
+  
+    // Clamp ONLY the visual line length
+    const dragVis = dragRaw.clone();
+    const MAX_AIM_LEN = 2.5;
+    if (dragVis.length() > MAX_AIM_LEN) {
+      dragVis.setLength(MAX_AIM_LEN);
+    }
+  
+    const VIS_SCALE = 1.5;
+  
+    aimLinePoints[0].copy(start);
+    aimLinePoints[1].copy(start).addScaledVector(dragVis, VIS_SCALE);
+  
+    aimLine.geometry.setFromPoints(aimLinePoints);
+    aimLine.visible = true;
+  } else {
+    aimLine.visible = false;
+  }       
+
   if (ballMesh) {
     // Apply shot
     if (input.consumeShotVelocity(shotVel)) {
-      if (ball.velocity.length() < 0.01) {
-        ball.velocity.copy(shotVel);
+        if (ball.velocity.length() < 0.01) {
+          ball.velocity.copy(shotVel);
+          strokes += 1;
+          console.log("Strokes:", strokes);
+        }
       }
-    }
 
     // Move ball
     ballMesh.position.addScaledVector(ball.velocity, dt);
@@ -105,6 +152,17 @@ function animate() {
 }
 
 animate();
+
+window.addEventListener("keydown", (e) => {
+    if (e.key === "r" || e.key === "R") {
+      if (ballMesh) {
+        ballMesh.position.copy(startPosition);
+        ball.velocity.set(0, 0, 0);
+        strokes = 0;
+        console.log("Reset. Strokes:", strokes);
+      }
+    }
+  });  
 
 // --- Resize ---
 window.addEventListener("resize", () => {
