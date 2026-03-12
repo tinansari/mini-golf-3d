@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { RGBELoader } from "three/examples/jsm/loaders/RGBELoader.js";
 import { initInput } from "./input.js";
 import { loadCourse } from "./scene.js";
 import { createCollisionDetector } from "./collision.js";
@@ -17,9 +18,7 @@ camera.position.set(0, 3, 8);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
-// set sky-like background color
-const SKY_COLOR = 0x87ceeb; // light sky blue
-renderer.setClearColor(SKY_COLOR, 1);
+renderer.toneMapping = THREE.NoToneMapping;
 document.body.appendChild(renderer.domElement);
 
 // --- Controls ---
@@ -28,17 +27,19 @@ controls.enableDamping = true;
 controls.enableRotate = false; // no changing angle for now
 
 // --- Lighting ---
-// give the scene a sky-like background
-scene.background = new THREE.Color(SKY_COLOR);
-
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(5, 10, 5);
 scene.add(light);
 
 // add a hemisphere light for nicer sky/ground lighting
 scene.add(new THREE.HemisphereLight(0x87ceeb, 0x444444, 0.35));
-
 scene.add(new THREE.AmbientLight(0xffffff, 0.22));
+
+// Load an EXR environment (equirectangular). Put your EXR at `public/assets/your_env.exr`
+new RGBELoader().load("/textures/suburban_garden_4k.hdr", (texture) => {
+  texture.mapping = THREE.EquirectangularReflectionMapping;
+  scene.background = texture;
+});
 
 let startPosition = new THREE.Vector3();
 
@@ -54,7 +55,7 @@ const ball = {
 let collisionDetector = null;
 
 // --- Load Course + Extract Blender Ball ---
-loadCourse(scene, ({ course, ballMesh: loadedBall }) => {
+loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh = loadedBall;
   
     if (!ballMesh) {
@@ -77,6 +78,30 @@ loadCourse(scene, ({ course, ballMesh: loadedBall }) => {
     ballMesh.position.copy(worldPos);
     ballMesh.quaternion.copy(worldQuat);
     ballMesh.scale.copy(worldScale);
+
+    // Make the golf ball much bigger
+    const BALL_SCALEUP = 4.0; // 4x bigger
+    ballMesh.scale.multiplyScalar(BALL_SCALEUP);
+
+    // If we have a hole mesh, move the ball close to the hole (toward the camera)
+    if (holeMesh) {
+      const holeWorldPos = new THREE.Vector3();
+      holeMesh.getWorldPosition(holeWorldPos);
+
+      // Compute direction from hole toward camera and place ball slightly toward camera
+      const camDir = new THREE.Vector3().subVectors(camera.position, holeWorldPos).normalize();
+      const DIST_BEHIND_HOLE = 0.6; // how far from hole toward camera
+      const desiredPos = holeWorldPos.clone().addScaledVector(camDir, DIST_BEHIND_HOLE);
+
+      // Ensure ball sits on top of ground: compute ball half-height from its bounding box
+      const ballBox = new THREE.Box3().setFromObject(ballMesh);
+      const ballSize = new THREE.Vector3();
+      ballBox.getSize(ballSize);
+      const halfHeight = ballSize.y / 2;
+
+      desiredPos.y = holeWorldPos.y + halfHeight + 0.02;
+      ballMesh.position.copy(desiredPos);
+    }
 
     startPosition.copy(ballMesh.position);
 
@@ -186,7 +211,8 @@ if (ballMesh && input.isAiming) {
 
               const div = document.createElement("div");
               div.id = "win-alert";
-              div.textContent = `You won in ${strokes} strokes!`;
+              // show strokes and a hint to restart
+              div.innerHTML = `You won in ${strokes} strokes!<br><span style="font-size:0.9em;opacity:0.95">Press R to play again.</span>`;
               Object.assign(div.style, {
                 position: "absolute",
                 left: `${Math.round(x)}px`,
