@@ -39,7 +39,11 @@ scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 // Load an EXR environment (equirectangular). Put your EXR at `public/assets/your_env.exr`
 new RGBELoader().load("/textures/suburban_garden_4k.hdr", (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
+
   scene.background = texture;
+
+  // rotate the HDR environment
+  scene.backgroundRotation.y = Math.PI / 2;
 });
 
 let startPosition = new THREE.Vector3();
