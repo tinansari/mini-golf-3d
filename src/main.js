@@ -46,6 +46,7 @@ let startPosition = new THREE.Vector3();
 
 // --- Ball State ---
 let ballMesh = null;
+const BALL_RADIUS = 0.12;
 
 let strokes = 0;
 
@@ -178,6 +179,11 @@ if (ballMesh && input.isAiming) {
 
     // Move ball
     ballMesh.position.addScaledVector(ball.velocity, dt);
+
+    // Rotate ball based on movement so it rolls
+    const moveDist = ball.velocity.length() * dt;
+    const axis = new THREE.Vector3(ball.velocity.z, 0, -ball.velocity.x).normalize();
+    ballMesh.rotateOnWorldAxis(axis, moveDist / BALL_RADIUS);
 
       // Check collision with hole (check returns { collided, entered })
       if (collisionDetector) {
