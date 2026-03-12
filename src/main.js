@@ -14,7 +14,8 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 3, 8);
+camera.position.set(0, 1.8, 3.2);
+camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -79,34 +80,34 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh.quaternion.copy(worldQuat);
     ballMesh.scale.copy(worldScale);
 
-    // Make the golf ball much bigger
-    const BALL_SCALEUP = 4.0; // 4x bigger
+    // Scale the golf ball
+    const BALL_SCALEUP = 0.6;
     ballMesh.scale.multiplyScalar(BALL_SCALEUP);
 
-    // If we have a hole mesh, move the ball close to the hole (toward the camera)
-    if (holeMesh) {
+    // Re-center the ball geometry so ballMesh.position controls the visible ball
+    ballMesh.geometry.computeBoundingBox();
+    const localCenter = new THREE.Vector3();
+    ballMesh.geometry.boundingBox.getCenter(localCenter);
+    ballMesh.geometry.translate(-localCenter.x, -localCenter.y, -localCenter.z);
+
+      // If we have a hole mesh, place the ball farther from the hole toward the camera    
+      if (holeMesh) {
       const holeWorldPos = new THREE.Vector3();
       holeMesh.getWorldPosition(holeWorldPos);
 
       // Compute direction from hole toward camera and place ball slightly toward camera
       const camDir = new THREE.Vector3().subVectors(camera.position, holeWorldPos).normalize();
-      const DIST_BEHIND_HOLE = 0.6; // how far from hole toward camera
+      const DIST_BEHIND_HOLE = 2; // how far from hole toward camera
       const desiredPos = holeWorldPos.clone().addScaledVector(camDir, DIST_BEHIND_HOLE);
 
-      // Ensure ball sits on top of ground: compute ball half-height from its bounding box
-      const ballBox = new THREE.Box3().setFromObject(ballMesh);
-      const ballSize = new THREE.Vector3();
-      ballBox.getSize(ballSize);
-      const halfHeight = ballSize.y / 2;
-
-      desiredPos.y = holeWorldPos.y + halfHeight + 0.02;
+      desiredPos.y = holeWorldPos.y + 0.08;
       ballMesh.position.copy(desiredPos);
     }
 
     startPosition.copy(ballMesh.position);
 
-      // create collision detector for this course
-      collisionDetector = createCollisionDetector(course);
+    // create collision detector for this course
+    collisionDetector = createCollisionDetector(course);
 
   });  
 
