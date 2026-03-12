@@ -44,6 +44,8 @@ export function loadCourse(scene, onLoaded) {
       if (holeMesh) {
         // scale down to 15% of original size (smaller hole)
         holeMesh.scale.multiplyScalar(0.15);
+        // reduce cylinder depth (Y scale) to half to make the hole shallower
+        holeMesh.scale.y *= 0.15;
         console.log("loadCourse: scaled hole mesh down to 15% size (", holeMesh.name, ")");
       }
 
