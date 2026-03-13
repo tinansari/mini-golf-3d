@@ -85,6 +85,16 @@ export function createCollisionDetector(course) {
 		}
 	});
 
+	// Number the stones 1..N and log their names so the developer can see which
+	// stone corresponds to which index. Useful for debugging collisions.
+	if (stones.length > 0) {
+		console.log("Stones found:");
+		stones.forEach((s, i) => {
+			s.index = i + 1;
+			console.log(`${i + 1}: ${s.mesh.name}`);
+		});
+	}
+
 	// Track previous collision state so we log every time the ball *enters*
 	// the hole (transition from not-collided -> collided). This avoids
 	// spamming logs each frame while the ball remains overlapping the hole,
@@ -135,7 +145,12 @@ export function createCollisionDetector(course) {
 					let stoneCollided = false;
 					let stoneEntered = false;
 					let stoneMesh = null;
+					let stoneIndex = null;
 					for (const s of stones) {
+						if (!s.mesh.visible) {
+							s._prevCollided = false;
+							continue;
+						}
 						const d = ballCenter.distanceTo(s.center);
 						const c = d <= s.radius + ballRadius - margin;
 						const e = c && !s._prevCollided;
@@ -147,11 +162,13 @@ export function createCollisionDetector(course) {
 						if (c) {
 							stoneCollided = true;
 							stoneMesh = s.mesh;
+							// prefer returning a 1-based index for user-friendly logging
+							stoneIndex = s.index || null;
 						}
 						if (e) stoneEntered = true;
 					}
 
-					return { collided, entered, stoneCollided, stoneEntered, stoneMesh };
+					return { collided, entered, stoneCollided, stoneEntered, stoneMesh, stoneIndex };
 		},
 
 		reset() {

@@ -64,6 +64,72 @@ let ballMesh = null;
 const BALL_RADIUS = 0.12;
 
 let strokes = 0;
+let currentLevel = 0;
+
+const LEVEL_2_STONE_NAMES = new Set([
+  "stone_2_edit_stone_2_edit_0001",
+  "stone_2_edit_stone_2_edit_0",
+  "stone_2_edit_stone_2_edit_0002",
+]);
+const levelTwoStones = [];
+
+function updateLevelStoneVisibility() {
+  const shouldShow = currentLevel === 2;
+  for (const stone of levelTwoStones) {
+    stone.visible = shouldShow;
+  }
+}
+
+function removeWinAlert() {
+  const existing = document.getElementById("win-alert");
+  if (existing) existing.remove();
+}
+
+function showLevelCompleteAlert(completedLevel) {
+  removeWinAlert();
+
+  const container = document.createElement("div");
+  container.id = "win-alert";
+  Object.assign(container.style, {
+    position: "fixed",
+    left: "50%",
+    top: "50%",
+    transform: "translate(-50%, -50%)",
+    background: "rgba(0,0,0,0.85)",
+    color: "#fff",
+    padding: "16px 20px",
+    borderRadius: "8px",
+    fontFamily: "sans-serif",
+    zIndex: 1000,
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+    alignItems: "center",
+  });
+
+  const message = document.createElement("div");
+  message.textContent = `You completed level ${completedLevel}.`;
+
+  const nextRoundButton = document.createElement("button");
+  nextRoundButton.textContent = "Next round";
+  Object.assign(nextRoundButton.style, {
+    border: "none",
+    borderRadius: "6px",
+    padding: "8px 12px",
+    cursor: "pointer",
+  });
+
+  nextRoundButton.addEventListener("click", () => {
+    currentLevel = 2;
+    updateLevelStoneVisibility();
+    console.log("Current level:", currentLevel);
+    container.remove();
+  });
+
+  container.appendChild(message);
+  container.appendChild(nextRoundButton);
+  document.body.appendChild(container);
+}
 
 const ball = {
   velocity: new THREE.Vector3(0, 0, 0),
@@ -98,6 +164,21 @@ function resolveStoneCollision(ballMeshLocal, ballState, collisionNormal) {
 let collisionDetector = null;
 
 let lastBallPos = new THREE.Vector3();
+
+function respawnBallAtLevelOneStart() {
+  if (!ballMesh) return;
+
+  const cameraOffset = camera.position.clone().sub(ballMesh.position);
+
+  ball.velocity.set(0, 0, 0);
+  ballMesh.position.copy(startPosition);
+  ballMesh.visible = true;
+
+  camera.position.copy(startPosition).add(cameraOffset);
+  lastBallPos.copy(startPosition);
+  controls.target.copy(startPosition);
+  controls.update();
+}
 
 // --- Load Course + Extract Blender Ball ---
 loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
@@ -137,6 +218,14 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
 
     // create collision detector for this course
     collisionDetector = createCollisionDetector(course);
+
+    levelTwoStones.length = 0;
+    course.traverse((c) => {
+      if (c.isMesh && LEVEL_2_STONE_NAMES.has(c.name)) {
+        levelTwoStones.push(c);
+      }
+    });
+    updateLevelStoneVisibility();
 
   });  
 
@@ -243,7 +332,11 @@ if (ballMesh && input.isAiming) {
           normal.normalize();
 
           resolveStoneCollision(ballMesh, ball, normal);
-          console.log("Ball collided with stone:", res.stoneMesh.name);
+          if (res.stoneIndex) {
+            console.log(`Ball collided with stone #${res.stoneIndex}:`, res.stoneMesh.name);
+          } else {
+            console.log("Ball collided with stone:", res.stoneMesh.name);
+          }
         }
 
         if (res.entered) {
@@ -258,44 +351,13 @@ if (ballMesh && input.isAiming) {
 
             // Only count as a win if speed <= 35
             if (speed <= 35) {
-              // Stop and hide the ball, then show a small DOM alert above its screen
-              ball.velocity.set(0, 0, 0);
+              const completedLevel = currentLevel === 2 ? 2 : 1;
+              currentLevel = completedLevel;
+              updateLevelStoneVisibility();
+              console.log("Current level:", currentLevel);
 
-              // compute screen pos of ball before hiding
-              const screenPos = ballMesh.position.clone();
-              screenPos.project(camera);
-              const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-              const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-
-              // hide the mesh
-              ballMesh.visible = false;
-
-              // remove existing alert if any
-              const existing = document.getElementById("win-alert");
-              if (existing) existing.remove();
-
-              const div = document.createElement("div");
-              div.id = "win-alert";
-              // show strokes and a hint to restart
-              div.innerHTML = `You won in ${strokes} strokes!<br><span style="font-size:0.9em;opacity:0.95">Press R to play again.</span>`;
-              Object.assign(div.style, {
-                position: "absolute",
-                left: `${Math.round(x)}px`,
-                top: `${Math.max(10, Math.round(y - 30))}px`, // place above the ball
-                transform: "translate(-50%, -100%)",
-                background: "rgba(0,0,0,0.8)",
-                color: "#fff",
-                padding: "8px 12px",
-                borderRadius: "6px",
-                fontFamily: "sans-serif",
-                zIndex: 1000,
-              });
-              document.body.appendChild(div);
-
-              // auto-remove after 4 seconds
-              setTimeout(() => {
-                div.remove();
-              }, 4000);
+              respawnBallAtLevelOneStart();
+              showLevelCompleteAlert(completedLevel);
             } else {
               console.log("Collision ignored: speed > 35 (", speed.toFixed(3), ")");
             }
@@ -321,14 +383,12 @@ animate();
 window.addEventListener("keydown", (e) => {
     if (e.key === "r" || e.key === "R") {
       if (ballMesh) {
-        ballMesh.position.copy(startPosition);
-        ball.velocity.set(0, 0, 0);
+        respawnBallAtLevelOneStart();
         strokes = 0;
-        // restore visibility and remove any win alert
-        ballMesh.visible = true;
-        const existing = document.getElementById("win-alert");
-        if (existing) existing.remove();
-        console.log("Reset. Strokes:", strokes);
+        currentLevel = 0;
+        updateLevelStoneVisibility();
+        removeWinAlert();
+        console.log("Reset. Strokes:", strokes, "Current level:", currentLevel);
       }
     }
   });  
