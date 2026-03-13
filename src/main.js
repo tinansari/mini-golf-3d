@@ -9,14 +9,13 @@ import { createCollisionDetector } from "./collision.js";
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
-  60,
+  45,
   window.innerWidth / window.innerHeight,
   0.1,
   1000
 );
 // Move camera slightly closer to the ball while keeping the same viewing angle
-camera.position.set(0, 1.5, 2.2);
-camera.lookAt(0, 0, 0);
+camera.position.set(0, 9.5, 8.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -98,6 +97,8 @@ function resolveStoneCollision(ballMeshLocal, ballState, collisionNormal) {
 
 let collisionDetector = null;
 
+let lastBallPos = new THREE.Vector3();
+
 // --- Load Course + Extract Blender Ball ---
 loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh = loadedBall;
@@ -128,6 +129,11 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     // or position beyond applying the world transform from the GLB.
 
     startPosition.copy(ballMesh.position);
+    lastBallPos.copy(ballMesh.position);
+
+    camera.lookAt(startPosition);
+    controls.target.copy(startPosition);
+    controls.update();
 
     // create collision detector for this course
     collisionDetector = createCollisionDetector(course);
@@ -201,6 +207,14 @@ if (ballMesh && input.isAiming) {
 
     // Move ball
     ballMesh.position.addScaledVector(ball.velocity, dt);
+
+    // Move camera with the ball
+    const delta = ballMesh.position.clone().sub(lastBallPos);
+    camera.position.add(delta);
+    lastBallPos.copy(ballMesh.position);
+
+    // Keep camera centered on the ball
+    controls.target.copy(ballMesh.position);
 
     // No visual scaling: keep the ball's scale as authored in the GLB so the
     // scene layout matches Blender exactly.
