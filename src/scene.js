@@ -27,8 +27,18 @@ export function loadCourse(scene, onLoaded) {
       });
     }
 
-    // Keep the GLB exactly as authored in Blender. Do not modify transforms or
-    // scale of the course or its child meshes so the layout matches the source.
+    // Reduce the hole cylinder height along the Z axis so the hole appears
+    // shallower in the scene. Some GLB exports orient cylinder height along
+    // the Z axis for this model, so we scale Z by 50%. This only runs if we
+    // found a hole mesh.
+    if (holeMesh && holeMesh.scale) {
+      // halve the Z scale (depth/height)
+      holeMesh.scale.y *= 0.25;
+      console.log("loadCourse: reduced hole mesh Z-scale by 50%:", holeMesh.name);
+    }
+
+    // Keep the GLB otherwise as authored in Blender. We only tweak the hole
+    // depth above so the gameplay hole is shallower.
 
     if (typeof onLoaded === "function") {
       onLoaded({ course, ballMesh, holeMesh });
