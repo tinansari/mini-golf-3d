@@ -66,18 +66,66 @@ const BALL_RADIUS = 0.12;
 let strokes = 0;
 let currentLevel = 0;
 
-const LEVEL_2_STONE_NAMES = new Set([
+const LEVEL_CONTROLLED_STONE_NAMES = new Set([
   "stone_2_edit_stone_2_edit_0001",
   "stone_2_edit_stone_2_edit_0",
   "stone_2_edit_stone_2_edit_0002",
 ]);
-const levelTwoStones = [];
+const LEVEL_3_HIDDEN_STONE_NAMES = new Set([
+  "stone_2_edit_stone_2_edit_0",
+  "stone_2_edit_stone_2_edit_0002",
+]);
+const LEVEL_3_MOVING_STONE_NAME = "stone_2_edit_stone_2_edit_0001";
+const LEVEL_3_MOVING_STONE_AMPLITUDE = 20.0;
+const LEVEL_3_MOVING_STONE_SPEED = 2.0;
+const LEVEL_3_MOVING_STONE_HEIGHT_OFFSET = -12.0;
+
+const levelControlledStones = [];
+let levelThreeMovingStone = null;
+let levelThreeMovingStoneBasePosition = null;
+let levelThreeMovingDirection = new THREE.Vector3();
 
 function updateLevelStoneVisibility() {
-  const shouldShow = currentLevel === 2;
-  for (const stone of levelTwoStones) {
-    stone.visible = shouldShow;
+  for (const stone of levelControlledStones) {
+    if (currentLevel === 2) {
+      stone.visible = true;
+    } else if (currentLevel === 3) {
+      stone.visible = !LEVEL_3_HIDDEN_STONE_NAMES.has(stone.name);
+    } else {
+      stone.visible = false;
+    }
   }
+
+  if (currentLevel !== 3 && levelThreeMovingStone && levelThreeMovingStoneBasePosition) {
+    levelThreeMovingStone.position.copy(levelThreeMovingStoneBasePosition);
+  }
+
+  console.log("[level3-debug] visibility update", {
+    currentLevel,
+    controlledStoneCount: levelControlledStones.length,
+    movingStoneFound: !!levelThreeMovingStone,
+    hasBasePosition: !!levelThreeMovingStoneBasePosition,
+    movingStoneVisible: levelThreeMovingStone ? levelThreeMovingStone.visible : null,
+  });
+}
+
+function animateLevelThreeStone(elapsedSeconds) {
+  if (
+    currentLevel !== 3 ||
+    !levelThreeMovingStone ||
+    !levelThreeMovingStoneBasePosition
+  ) {
+    return;
+  }
+
+  const offset =
+    Math.sin(elapsedSeconds * LEVEL_3_MOVING_STONE_SPEED) *
+    LEVEL_3_MOVING_STONE_AMPLITUDE;
+
+  levelThreeMovingStone.position.copy(levelThreeMovingStoneBasePosition);
+  levelThreeMovingStone.position.addScaledVector(levelThreeMovingDirection, offset);
+  // raise stone slightly so it doesn't clip into grass
+  levelThreeMovingStone.position.z += LEVEL_3_MOVING_STONE_HEIGHT_OFFSET;
 }
 
 function removeWinAlert() {
@@ -87,6 +135,8 @@ function removeWinAlert() {
 
 function showLevelCompleteAlert(completedLevel) {
   removeWinAlert();
+
+  const isFinalLevel = completedLevel >= 3;
 
   const container = document.createElement("div");
   container.id = "win-alert";
@@ -108,26 +158,37 @@ function showLevelCompleteAlert(completedLevel) {
   });
 
   const message = document.createElement("div");
-  message.textContent = `You completed level ${completedLevel}.`;
-
-  const nextRoundButton = document.createElement("button");
-  nextRoundButton.textContent = "Next round";
-  Object.assign(nextRoundButton.style, {
-    border: "none",
-    borderRadius: "6px",
-    padding: "8px 12px",
-    cursor: "pointer",
-  });
-
-  nextRoundButton.addEventListener("click", () => {
-    currentLevel = 2;
-    updateLevelStoneVisibility();
-    console.log("Current level:", currentLevel);
-    container.remove();
-  });
+  message.textContent = isFinalLevel
+    ? "Level 3 complete. Press R to play again."
+    : `You completed level ${completedLevel}.`;
 
   container.appendChild(message);
-  container.appendChild(nextRoundButton);
+
+  if (!isFinalLevel) {
+    const nextRoundButton = document.createElement("button");
+    nextRoundButton.textContent = "Next round";
+    Object.assign(nextRoundButton.style, {
+      border: "none",
+      borderRadius: "6px",
+      padding: "8px 12px",
+      cursor: "pointer",
+    });
+
+    nextRoundButton.addEventListener("click", () => {
+      const nextLevel = Math.min(completedLevel + 1, 3);
+      console.log("[level3-debug] next round clicked", {
+        completedLevel,
+        nextLevel,
+      });
+      currentLevel = nextLevel;
+      updateLevelStoneVisibility();
+      console.log("Current level:", currentLevel);
+      container.remove();
+    });
+
+    container.appendChild(nextRoundButton);
+  }
+
   document.body.appendChild(container);
 }
 
@@ -219,12 +280,36 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     // create collision detector for this course
     collisionDetector = createCollisionDetector(course);
 
-    levelTwoStones.length = 0;
+    levelControlledStones.length = 0;
+    levelThreeMovingStone = null;
+    levelThreeMovingStoneBasePosition = null;
+    levelThreeMovingDirection.set(0, 0, 0);
     course.traverse((c) => {
-      if (c.isMesh && LEVEL_2_STONE_NAMES.has(c.name)) {
-        levelTwoStones.push(c);
+      if (c.isMesh && LEVEL_CONTROLLED_STONE_NAMES.has(c.name)) {
+        levelControlledStones.push(c);
+        console.log("[level3-debug] found controlled stone", c.name);
+        if (c.name === LEVEL_3_MOVING_STONE_NAME) {
+          levelThreeMovingStone = c;
+          levelThreeMovingStoneBasePosition = c.position.clone();
+
+          const worldQuat = c.getWorldQuaternion(new THREE.Quaternion());
+
+          // Blender Y axis -> transformed into world direction
+          levelThreeMovingDirection.set(0, 1, 0).applyQuaternion(worldQuat);
+          levelThreeMovingDirection.y = 0; // keep motion on ground plane only
+          levelThreeMovingDirection.normalize();
+
+          console.log("[level3-debug] found moving stone", {
+            name: c.name,
+            basePosition: levelThreeMovingStoneBasePosition.toArray(),
+            moveDir: levelThreeMovingDirection.toArray(),
+          });
+        }
       }
     });
+    if (!levelThreeMovingStone) {
+      console.warn("[level3-debug] moving stone not found", LEVEL_3_MOVING_STONE_NAME);
+    }
     updateLevelStoneVisibility();
 
   });  
@@ -240,9 +325,15 @@ const input = initInput({
 // --- Aim Line (visual feedback while dragging) ---
 const aimLinePoints = [new THREE.Vector3(), new THREE.Vector3()];
 const aimLineGeom = new THREE.BufferGeometry().setFromPoints(aimLinePoints);
-const aimLineMat = new THREE.LineBasicMaterial({ color: 0xffffff });
+const aimLineMat = new THREE.LineBasicMaterial({
+  color: 0xffffff,
+  depthTest: false,
+});
 const aimLine = new THREE.Line(aimLineGeom, aimLineMat);
+const lastAimDirection = new THREE.Vector3(1, 0, 0);
 aimLine.visible = false;
+aimLine.renderOrder = 1000;
+aimLine.frustumCulled = false;
 scene.add(aimLine);
 
 // --- Animation ---
@@ -253,6 +344,7 @@ function animate() {
   requestAnimationFrame(animate);
 
   const dt = clock.getDelta();
+  animateLevelThreeStone(clock.getElapsedTime());
 
 // --- Aim Line (top-center of ball mesh, visual clamp only) ---
 if (ballMesh && input.isAiming) {
@@ -269,8 +361,18 @@ if (ballMesh && input.isAiming) {
     // Clamp ONLY the visual line length
     const dragVis = dragRaw.clone();
     const MAX_AIM_LEN = 2.5;
+    const MIN_AIM_LEN = 0.2;
     if (dragVis.length() > MAX_AIM_LEN) {
       dragVis.setLength(MAX_AIM_LEN);
+    }
+
+    if (dragVis.lengthSq() > 1e-6) {
+      lastAimDirection.copy(dragVis).normalize();
+      if (dragVis.length() < MIN_AIM_LEN) {
+        dragVis.setLength(MIN_AIM_LEN);
+      }
+    } else {
+      dragVis.copy(lastAimDirection).setLength(MIN_AIM_LEN);
     }
   
     const VIS_SCALE = 1.5;
@@ -351,7 +453,7 @@ if (ballMesh && input.isAiming) {
 
             // Only count as a win if speed <= 35
             if (speed <= 35) {
-              const completedLevel = currentLevel === 2 ? 2 : 1;
+              const completedLevel = currentLevel >= 1 ? currentLevel : 1;
               currentLevel = completedLevel;
               updateLevelStoneVisibility();
               console.log("Current level:", currentLevel);

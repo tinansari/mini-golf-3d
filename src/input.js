@@ -19,6 +19,16 @@ export function initInput({ camera, domElement, controls, groundY = 0 }) {
   const mouseNDC = new THREE.Vector2();
   const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -groundY);
 
+  function setFallbackAimPoint(outVec3) {
+    if (controls?.target) {
+      outVec3.copy(controls.target);
+      outVec3.y = groundY;
+      return;
+    }
+
+    outVec3.set(0, groundY, 0);
+  }
+
   function getGroundPointFromEvent(e, outVec3) {
     const rect = domElement.getBoundingClientRect();
     mouseNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
@@ -60,7 +70,9 @@ export function initInput({ camera, domElement, controls, groundY = 0 }) {
     if (controls) controls.enabled = false;
 
     const ok = getGroundPointFromEvent(e, startPoint);
-    if (!ok) return;
+    if (!ok) {
+      setFallbackAimPoint(startPoint);
+    }
 
     isAiming = true;
     currPoint.copy(startPoint);

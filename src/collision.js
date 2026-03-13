@@ -100,6 +100,8 @@ export function createCollisionDetector(course) {
 	// spamming logs each frame while the ball remains overlapping the hole,
 	// but still logs every separate collision event.
 	let _prevCollided = false;
+	const stoneTmpBox = new THREE.Box3();
+	const stoneTmpSize = new THREE.Vector3();
 
 	return {
 		/**
@@ -151,8 +153,13 @@ export function createCollisionDetector(course) {
 							s._prevCollided = false;
 							continue;
 						}
+						stoneTmpBox.setFromObject(s.mesh);
+						stoneTmpBox.expandByScalar(-STONE_SHRINK);
+						stoneTmpBox.getCenter(s.center);
+						stoneTmpBox.getSize(stoneTmpSize);
+						const stoneRadius = Math.max(stoneTmpSize.x, stoneTmpSize.z) / 2;
 						const d = ballCenter.distanceTo(s.center);
-						const c = d <= s.radius + ballRadius - margin;
+						const c = d <= stoneRadius + ballRadius - margin;
 						const e = c && !s._prevCollided;
 						if (e) {
 							console.log("Collision detected: ball hit stone (", s.mesh.name, ") dist=", d.toFixed(3));
