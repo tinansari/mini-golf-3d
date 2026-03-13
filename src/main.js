@@ -22,6 +22,26 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.NoToneMapping;
 document.body.appendChild(renderer.domElement);
 
+const levelBanner = document.createElement("div");
+levelBanner.id = "level-banner";
+Object.assign(levelBanner.style, {
+  position: "fixed",
+  top: "16px",
+  left: "50%",
+  transform: "translateX(-50%)",
+  background: "rgba(0,0,0,0.7)",
+  color: "#fff",
+  padding: "10px 18px",
+  borderRadius: "999px",
+  fontFamily: "sans-serif",
+  fontSize: "18px",
+  fontWeight: "600",
+  letterSpacing: "0.04em",
+  zIndex: 1000,
+  pointerEvents: "none",
+});
+document.body.appendChild(levelBanner);
+
 // --- Controls ---
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -84,6 +104,14 @@ const levelControlledStones = [];
 let levelThreeMovingStone = null;
 let levelThreeMovingStoneBasePosition = null;
 let levelThreeMovingDirection = new THREE.Vector3();
+
+function getActiveLevelNumber() {
+  return Math.max(currentLevel, 1);
+}
+
+function updateLevelBanner() {
+  levelBanner.textContent = `Level ${getActiveLevelNumber()}`;
+}
 
 function updateLevelStoneVisibility() {
   for (const stone of levelControlledStones) {
@@ -181,6 +209,7 @@ function showLevelCompleteAlert(completedLevel) {
         nextLevel,
       });
       currentLevel = nextLevel;
+      updateLevelBanner();
       updateLevelStoneVisibility();
       console.log("Current level:", currentLevel);
       container.remove();
@@ -310,6 +339,7 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     if (!levelThreeMovingStone) {
       console.warn("[level3-debug] moving stone not found", LEVEL_3_MOVING_STONE_NAME);
     }
+    updateLevelBanner();
     updateLevelStoneVisibility();
 
   });  
@@ -455,6 +485,7 @@ if (ballMesh && input.isAiming) {
             if (speed <= 35) {
               const completedLevel = currentLevel >= 1 ? currentLevel : 1;
               currentLevel = completedLevel;
+              updateLevelBanner();
               updateLevelStoneVisibility();
               console.log("Current level:", currentLevel);
 
@@ -488,12 +519,15 @@ window.addEventListener("keydown", (e) => {
         respawnBallAtLevelOneStart();
         strokes = 0;
         currentLevel = 0;
+        updateLevelBanner();
         updateLevelStoneVisibility();
         removeWinAlert();
         console.log("Reset. Strokes:", strokes, "Current level:", currentLevel);
       }
     }
   });  
+
+updateLevelBanner();
 
 // --- Resize ---
 window.addEventListener("resize", () => {
