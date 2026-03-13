@@ -50,7 +50,8 @@ let startPosition = new THREE.Vector3();
 
 // --- Ball State ---
 let ballMesh = null;
-const BALL_RADIUS = 0.12;
+let BALL_RADIUS = 0.12;
+let _baseBallScale = new THREE.Vector3(1, 1, 1);
 
 let strokes = 0;
 
@@ -85,15 +86,27 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh.quaternion.copy(worldQuat);
     ballMesh.scale.copy(worldScale);
 
-    // Scale the golf ball
-    const BALL_SCALEUP = 0.6;
-    ballMesh.scale.multiplyScalar(BALL_SCALEUP);
+  // Scale the golf ball (existing scaleup, then reduce by 30%)
+  const BALL_SCALEUP = 0.6;
+  ballMesh.scale.multiplyScalar(BALL_SCALEUP);
+  // reduce current size by 30%
+  ballMesh.scale.multiplyScalar(0.7);
 
-    // Re-center the ball geometry so ballMesh.position controls the visible ball
-    ballMesh.geometry.computeBoundingBox();
-    const localCenter = new THREE.Vector3();
-    ballMesh.geometry.boundingBox.getCenter(localCenter);
-    ballMesh.geometry.translate(-localCenter.x, -localCenter.y, -localCenter.z);
+  // Re-center the ball geometry so ballMesh.position controls the visible ball
+  ballMesh.geometry.computeBoundingBox();
+  const localCenter = new THREE.Vector3();
+  ballMesh.geometry.boundingBox.getCenter(localCenter);
+  ballMesh.geometry.translate(-localCenter.x, -localCenter.y, -localCenter.z);
+
+  // Recompute a world-space bounding box and update BALL_RADIUS so rolling uses the
+  // correct radius after scaling.
+  const worldBox = new THREE.Box3().setFromObject(ballMesh);
+  const worldSize = new THREE.Vector3();
+  worldBox.getSize(worldSize);
+  BALL_RADIUS = Math.max(worldSize.x, worldSize.z) / 2;
+
+  // store the base visual scale so we can adjust visual size dynamically
+  _baseBallScale.copy(ballMesh.scale);
 
       // If we have a hole mesh, place the ball farther from the hole toward the camera    
       if (holeMesh) {
@@ -183,6 +196,18 @@ if (ballMesh && input.isAiming) {
 
     // Move ball
     ballMesh.position.addScaledVector(ball.velocity, dt);
+
+  // Visually scale the ball based on distance from camera so it appears smaller when far away.
+  // Tuning parameters (made more aggressive so the ball shrinks more):
+  const NEAR_DIST = 0.6; // distance at which visual scale is 1.0
+  const FAR_DIST = 5.0; // distance at which visual scale reaches MIN_SCALE
+  const MIN_SCALE = 0.35; // smallest visual scale (smaller than before)
+  const dist = camera.position.distanceTo(ballMesh.position);
+  // Use a smoothstep curve for nicer falloff
+  const tRaw = THREE.MathUtils.clamp((dist - NEAR_DIST) / (FAR_DIST - NEAR_DIST), 0, 1);
+  const t = THREE.MathUtils.smoothstep(tRaw, 0, 1);
+  const visScale = THREE.MathUtils.lerp(1.0, MIN_SCALE, t);
+  ballMesh.scale.copy(_baseBallScale).multiplyScalar(visScale);
 
     // Rotate ball based on movement so it rolls
     const moveDist = ball.velocity.length() * dt;
