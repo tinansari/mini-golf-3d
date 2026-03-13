@@ -44,14 +44,19 @@ export function initInput({ camera, domElement, controls, groundY = 0 }) {
 
   // --- events ---
   function onPointerDown(e) {
-    // Cmd+drag = pan; let OrbitControls handle it
-    if (e.metaKey) {
+    // Allow OrbitControls to handle dragging (pan/zoom/rotate) when the
+    // user holds a modifier or uses a non-primary mouse button:
+    // - metaKey (Cmd/Ctrl) or altKey
+    // - middle (button===1) or right (button===2) mouse buttons
+    // In those cases we leave controls.enabled = true and do not enter aiming.
+    if (e.metaKey || e.altKey || e.button === 1 || e.button === 2) {
       if (controls) controls.enabled = true;
       isAiming = false;
       return;
     }
 
-    // aiming mode: disable controls so drag doesn't pan/rotate
+    // aiming mode: disable controls so primary-button drag doesn't pan/rotate
+    // (primary left-drag is used for aiming/shooting)
     if (controls) controls.enabled = false;
 
     const ok = getGroundPointFromEvent(e, startPoint);

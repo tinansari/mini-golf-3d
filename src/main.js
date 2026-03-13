@@ -70,6 +70,32 @@ const ball = {
   velocity: new THREE.Vector3(0, 0, 0),
 };
 
+// Resolve a collision between the ball and a static stone. Uses a simple
+// restitution + tangential damping model to reflect the velocity based on
+// the collision normal. Also nudges the ball slightly outside the stone to
+// avoid sticking.
+function resolveStoneCollision(ballMeshLocal, ballState, collisionNormal) {
+  const n = collisionNormal.clone().normalize();
+
+  // only respond if ball is moving into the surface
+  const vn = ballState.velocity.dot(n);
+  if (vn >= 0) return;
+
+  // push ball slightly outside obstacle to avoid sticking
+  ballMeshLocal.position.add(n.clone().multiplyScalar(0.02));
+
+  const restitution = 0.65;     // bounce strength
+  const tangentDamping = 0.92;  // friction-like loss along the surface
+
+  const vNormal = n.clone().multiplyScalar(vn);
+  const vTangent = ballState.velocity.clone().sub(vNormal);
+
+  ballState.velocity.copy(
+    vTangent.multiplyScalar(tangentDamping)
+      .sub(vNormal.multiplyScalar(restitution))
+  );
+}
+
 let collisionDetector = null;
 
 // --- Load Course + Extract Blender Ball ---
@@ -187,6 +213,25 @@ if (ballMesh && input.isAiming) {
       // Check collision with hole (check returns { collided, entered })
       if (collisionDetector) {
         const res = collisionDetector.check(ballMesh);
+
+        // If the ball collided with any stone, resolve collision with a
+        // reflection response so the ball bounces/deflects instead of
+        // instantly stopping.
+        if (res.stoneCollided && res.stoneMesh) {
+          // approximate collision normal from stone center -> ball position
+          const stoneBox = new THREE.Box3().setFromObject(res.stoneMesh);
+          const stoneCenter = new THREE.Vector3();
+          stoneBox.getCenter(stoneCenter);
+
+          const normal = ballMesh.position.clone().sub(stoneCenter);
+          normal.y = 0; // operate in XZ plane for surface normal
+          if (normal.lengthSq() === 0) normal.set(0, 0, 1);
+          normal.normalize();
+
+          resolveStoneCollision(ballMesh, ball, normal);
+          console.log("Ball collided with stone:", res.stoneMesh.name);
+        }
+
         if (res.entered) {
             // Log the ball velocity (vector and scalar speed)
             const speed = ball.velocity.length();
