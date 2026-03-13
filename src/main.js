@@ -14,7 +14,8 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-camera.position.set(0, 1.8, 3.2);
+// Move camera slightly closer to the ball while keeping the same viewing angle
+camera.position.set(0, 1.5, 2.2);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -25,7 +26,18 @@ document.body.appendChild(renderer.domElement);
 // --- Controls ---
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
+// Allow panning so the user can move the camera around the authored scene
+// Keep rotate disabled for now so the view angle doesn't change unexpectedly
 controls.enableRotate = false; // no changing angle for now
+controls.enablePan = true;
+// Use screen-space panning so vertical drag pans up/down the screen instead of dollying
+controls.screenSpacePanning = true;
+// Map primary (left) mouse drag to panning so the user can pan with the primary button
+controls.mouseButtons = {
+  LEFT: THREE.MOUSE.PAN,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
 
 // --- Lighting ---
 const light = new THREE.DirectionalLight(0xffffff, 1);
@@ -37,7 +49,7 @@ scene.add(new THREE.HemisphereLight(0x87ceeb, 0x444444, 0.35));
 scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 
 // Load an EXR environment (equirectangular). Put your EXR at `public/assets/your_env.exr`
-new RGBELoader().load("/textures/suburban_garden_4k.hdr", (texture) => {
+new RGBELoader().load("/textures/horn-koppe_spring_4k.hdr", (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
 
   scene.background = texture;
@@ -50,8 +62,7 @@ let startPosition = new THREE.Vector3();
 
 // --- Ball State ---
 let ballMesh = null;
-let BALL_RADIUS = 0.12;
-let _baseBallScale = new THREE.Vector3(1, 1, 1);
+const BALL_RADIUS = 0.12;
 
 let strokes = 0;
 
@@ -66,7 +77,7 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh = loadedBall;
   
     if (!ballMesh) {
-      console.warn("Ball mesh named 'Ball' was not found in the OBJ.");
+      console.warn("Ball mesh named 'ball' (or variant) was not found in the GLB.");
       return;
     }
   
@@ -86,41 +97,9 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh.quaternion.copy(worldQuat);
     ballMesh.scale.copy(worldScale);
 
-  // Scale the golf ball (existing scaleup, then reduce by 30%)
-  const BALL_SCALEUP = 0.6;
-  ballMesh.scale.multiplyScalar(BALL_SCALEUP);
-  // reduce current size by 30%
-  ballMesh.scale.multiplyScalar(0.7);
-
-  // Re-center the ball geometry so ballMesh.position controls the visible ball
-  ballMesh.geometry.computeBoundingBox();
-  const localCenter = new THREE.Vector3();
-  ballMesh.geometry.boundingBox.getCenter(localCenter);
-  ballMesh.geometry.translate(-localCenter.x, -localCenter.y, -localCenter.z);
-
-  // Recompute a world-space bounding box and update BALL_RADIUS so rolling uses the
-  // correct radius after scaling.
-  const worldBox = new THREE.Box3().setFromObject(ballMesh);
-  const worldSize = new THREE.Vector3();
-  worldBox.getSize(worldSize);
-  BALL_RADIUS = Math.max(worldSize.x, worldSize.z) / 2;
-
-  // store the base visual scale so we can adjust visual size dynamically
-  _baseBallScale.copy(ballMesh.scale);
-
-      // If we have a hole mesh, place the ball farther from the hole toward the camera    
-      if (holeMesh) {
-      const holeWorldPos = new THREE.Vector3();
-      holeMesh.getWorldPosition(holeWorldPos);
-
-      // Compute direction from hole toward camera and place ball slightly toward camera
-      const camDir = new THREE.Vector3().subVectors(camera.position, holeWorldPos).normalize();
-      const DIST_BEHIND_HOLE = 2; // how far from hole toward camera
-      const desiredPos = holeWorldPos.clone().addScaledVector(camDir, DIST_BEHIND_HOLE);
-
-      desiredPos.y = holeWorldPos.y + 0.08;
-      ballMesh.position.copy(desiredPos);
-    }
+    // Keep the ball exactly as authored in the GLB. We detach it from the course
+    // so it can be moved independently, but do not change its local scale, geometry
+    // or position beyond applying the world transform from the GLB.
 
     startPosition.copy(ballMesh.position);
 
@@ -197,17 +176,8 @@ if (ballMesh && input.isAiming) {
     // Move ball
     ballMesh.position.addScaledVector(ball.velocity, dt);
 
-  // Visually scale the ball based on distance from camera so it appears smaller when far away.
-  // Tuning parameters (made more aggressive so the ball shrinks more):
-  const NEAR_DIST = 0.6; // distance at which visual scale is 1.0
-  const FAR_DIST = 5.0; // distance at which visual scale reaches MIN_SCALE
-  const MIN_SCALE = 0.35; // smallest visual scale (smaller than before)
-  const dist = camera.position.distanceTo(ballMesh.position);
-  // Use a smoothstep curve for nicer falloff
-  const tRaw = THREE.MathUtils.clamp((dist - NEAR_DIST) / (FAR_DIST - NEAR_DIST), 0, 1);
-  const t = THREE.MathUtils.smoothstep(tRaw, 0, 1);
-  const visScale = THREE.MathUtils.lerp(1.0, MIN_SCALE, t);
-  ballMesh.scale.copy(_baseBallScale).multiplyScalar(visScale);
+    // No visual scaling: keep the ball's scale as authored in the GLB so the
+    // scene layout matches Blender exactly.
 
     // Rotate ball based on movement so it rolls
     const moveDist = ball.velocity.length() * dt;
