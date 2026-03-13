@@ -52,7 +52,7 @@ export function createCollisionDetector(course) {
 	// collision radius. Positive value means the box is expanded; we pass a
 	// negative value to shrink the box inward. Tune this to adjust how close
 	// the ball must be before a stone collision registers.
-	const STONE_SHRINK = 0.2; // increased shrink so collisions occur closer to the mesh
+	const STONE_SHRINK = 0.3; // increased shrink so collisions occur closer to the mesh
 	// Helper to decide whether a mesh name should be treated as a stone.
 	// We want to match common exporter naming like:
 	// - "stone", "Stone"
