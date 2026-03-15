@@ -5,7 +5,6 @@ import { initInput } from "./input.js";
 import { loadCourse } from "./scene.js";
 import { createCollisionDetector } from "./collision.js";
 
-// --- Scene Setup ---
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(
@@ -14,7 +13,7 @@ const camera = new THREE.PerspectiveCamera(
   0.1,
   1000
 );
-// Move camera slightly closer to the ball while keeping the same viewing angle
+// Move camera closer to the ball while keeping the same viewing angle
 camera.position.set(0, 9.5, 8.5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -42,32 +41,26 @@ Object.assign(levelBanner.style, {
 });
 document.body.appendChild(levelBanner);
 
-// --- Controls ---
+// Controls
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
-// Allow panning so the user can move the camera around the authored scene
-// Keep rotate disabled for now so the view angle doesn't change unexpectedly
-controls.enableRotate = false; // no changing angle for now
+controls.enableRotate = false;
 controls.enablePan = true;
-// Use screen-space panning so vertical drag pans up/down the screen instead of dollying
 controls.screenSpacePanning = true;
-// Map primary (left) mouse drag to panning so the user can pan with the primary button
 controls.mouseButtons = {
   LEFT: THREE.MOUSE.PAN,
   MIDDLE: THREE.MOUSE.DOLLY,
   RIGHT: THREE.MOUSE.ROTATE,
 };
 
-// --- Lighting ---
+// Lighting
 const light = new THREE.DirectionalLight(0xffffff, 1);
 light.position.set(5, 10, 5);
 scene.add(light);
 
-// add a hemisphere light for nicer sky/ground lighting
 scene.add(new THREE.HemisphereLight(0x87ceeb, 0x444444, 0.35));
 scene.add(new THREE.AmbientLight(0xffffff, 0.22));
 
-// Load an EXR environment (equirectangular). Put your EXR at `public/assets/your_env.exr`
 new RGBELoader().load("/textures/horn-koppe_spring_4k.hdr", (texture) => {
   texture.mapping = THREE.EquirectangularReflectionMapping;
 
@@ -79,7 +72,7 @@ new RGBELoader().load("/textures/horn-koppe_spring_4k.hdr", (texture) => {
 
 let startPosition = new THREE.Vector3();
 
-// --- Ball State ---
+// Ball State
 let ballMesh = null;
 const BALL_RADIUS = 0.12;
 
@@ -127,14 +120,6 @@ function updateLevelStoneVisibility() {
   if (currentLevel !== 3 && levelThreeMovingStone && levelThreeMovingStoneBasePosition) {
     levelThreeMovingStone.position.copy(levelThreeMovingStoneBasePosition);
   }
-
-  console.log("[level3-debug] visibility update", {
-    currentLevel,
-    controlledStoneCount: levelControlledStones.length,
-    movingStoneFound: !!levelThreeMovingStone,
-    hasBasePosition: !!levelThreeMovingStoneBasePosition,
-    movingStoneVisible: levelThreeMovingStone ? levelThreeMovingStone.visible : null,
-  });
 }
 
 function animateLevelThreeStone(elapsedSeconds) {
@@ -204,10 +189,7 @@ function showLevelCompleteAlert(completedLevel) {
 
     nextRoundButton.addEventListener("click", () => {
       const nextLevel = Math.min(completedLevel + 1, 3);
-      console.log("[level3-debug] next round clicked", {
-        completedLevel,
-        nextLevel,
-      });
+
       currentLevel = nextLevel;
       updateLevelBanner();
       updateLevelStoneVisibility();
@@ -225,14 +207,10 @@ const ball = {
   velocity: new THREE.Vector3(0, 0, 0),
 };
 
-// Resolve a collision between the ball and a static stone. Uses a simple
-// restitution + tangential damping model to reflect the velocity based on
-// the collision normal. Also nudges the ball slightly outside the stone to
-// avoid sticking.
+// Resolve a collision between the ball and a static stone.
 function resolveStoneCollision(ballMeshLocal, ballState, collisionNormal) {
   const n = collisionNormal.clone().normalize();
 
-  // only respond if ball is moving into the surface
   const vn = ballState.velocity.dot(n);
   if (vn >= 0) return;
 
@@ -270,7 +248,7 @@ function respawnBallAtLevelOneStart() {
   controls.update();
 }
 
-// --- Load Course + Extract Blender Ball ---
+// Load course and extract blender ball
 loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh = loadedBall;
   
@@ -279,7 +257,7 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
       return;
     }
   
-    // IMPORTANT: detach ball from rotated course so it moves in world space
+    // Detach ball from rotated course so it moves in world space
     course.updateMatrixWorld(true);
   
     const worldPos = new THREE.Vector3();
@@ -295,10 +273,6 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     ballMesh.quaternion.copy(worldQuat);
     ballMesh.scale.copy(worldScale);
 
-    // Keep the ball exactly as authored in the GLB. We detach it from the course
-    // so it can be moved independently, but do not change its local scale, geometry
-    // or position beyond applying the world transform from the GLB.
-
     startPosition.copy(ballMesh.position);
     lastBallPos.copy(ballMesh.position);
 
@@ -306,7 +280,7 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     controls.target.copy(startPosition);
     controls.update();
 
-    // create collision detector for this course
+    // create collision detector for the course
     collisionDetector = createCollisionDetector(course);
 
     levelControlledStones.length = 0;
@@ -316,35 +290,24 @@ loadCourse(scene, ({ course, ballMesh: loadedBall, holeMesh }) => {
     course.traverse((c) => {
       if (c.isMesh && LEVEL_CONTROLLED_STONE_NAMES.has(c.name)) {
         levelControlledStones.push(c);
-        console.log("[level3-debug] found controlled stone", c.name);
         if (c.name === LEVEL_3_MOVING_STONE_NAME) {
           levelThreeMovingStone = c;
           levelThreeMovingStoneBasePosition = c.position.clone();
 
           const worldQuat = c.getWorldQuaternion(new THREE.Quaternion());
 
-          // Blender Y axis -> transformed into world direction
           levelThreeMovingDirection.set(0, 1, 0).applyQuaternion(worldQuat);
           levelThreeMovingDirection.y = 0; // keep motion on ground plane only
           levelThreeMovingDirection.normalize();
-
-          console.log("[level3-debug] found moving stone", {
-            name: c.name,
-            basePosition: levelThreeMovingStoneBasePosition.toArray(),
-            moveDir: levelThreeMovingDirection.toArray(),
-          });
         }
       }
     });
-    if (!levelThreeMovingStone) {
-      console.warn("[level3-debug] moving stone not found", LEVEL_3_MOVING_STONE_NAME);
-    }
     updateLevelBanner();
     updateLevelStoneVisibility();
 
   });  
 
-// --- Input System ---
+// Input System
 const input = initInput({
   camera,
   domElement: renderer.domElement,
@@ -352,7 +315,7 @@ const input = initInput({
   groundY: 0,
 });
 
-// --- Aim Line (visual feedback while dragging) ---
+// Aim Line
 const aimLinePoints = [new THREE.Vector3(), new THREE.Vector3()];
 const aimLineGeom = new THREE.BufferGeometry().setFromPoints(aimLinePoints);
 const aimLineMat = new THREE.LineBasicMaterial({
@@ -366,7 +329,7 @@ aimLine.renderOrder = 1000;
 aimLine.frustumCulled = false;
 scene.add(aimLine);
 
-// --- Animation ---
+// Animation
 const clock = new THREE.Clock();
 const shotVel = new THREE.Vector3();
 
@@ -376,19 +339,19 @@ function animate() {
   const dt = clock.getDelta();
   animateLevelThreeStone(clock.getElapsedTime());
 
-// --- Aim Line (top-center of ball mesh, visual clamp only) ---
+// Aim Line
 if (ballMesh && input.isAiming) {
-    // True top-center of the mesh (handles weird pivots)
+    // True top-center of the mesh
     const box = new THREE.Box3().setFromObject(ballMesh);
     const center = new THREE.Vector3();
     box.getCenter(center);
     const start = new THREE.Vector3(center.x, box.max.y, center.z);
   
-    // Raw drag (unlimited power in input.js)
+    // Raw drag (unlimited power)
     const dragRaw = new THREE.Vector3().subVectors(input.startPoint, input.currPoint);
     dragRaw.y = 0;
   
-    // Clamp ONLY the visual line length
+    // Clamp the visual line length
     const dragVis = dragRaw.clone();
     const MAX_AIM_LEN = 2.5;
     const MIN_AIM_LEN = 0.2;
@@ -437,9 +400,6 @@ if (ballMesh && input.isAiming) {
     // Keep camera centered on the ball
     controls.target.copy(ballMesh.position);
 
-    // No visual scaling: keep the ball's scale as authored in the GLB so the
-    // scene layout matches Blender exactly.
-
     // Rotate ball based on movement so it rolls
     const moveDist = ball.velocity.length() * dt;
     const axis = new THREE.Vector3(ball.velocity.z, 0, -ball.velocity.x).normalize();
@@ -450,10 +410,8 @@ if (ballMesh && input.isAiming) {
         const res = collisionDetector.check(ballMesh);
 
         // If the ball collided with any stone, resolve collision with a
-        // reflection response so the ball bounces/deflects instead of
-        // instantly stopping.
+        // reflection response so the ball bounces/deflects.
         if (res.stoneCollided && res.stoneMesh) {
-          // approximate collision normal from stone center -> ball position
           const stoneBox = new THREE.Box3().setFromObject(res.stoneMesh);
           const stoneCenter = new THREE.Vector3();
           stoneBox.getCenter(stoneCenter);
@@ -464,15 +422,10 @@ if (ballMesh && input.isAiming) {
           normal.normalize();
 
           resolveStoneCollision(ballMesh, ball, normal);
-          if (res.stoneIndex) {
-            console.log(`Ball collided with stone #${res.stoneIndex}:`, res.stoneMesh.name);
-          } else {
-            console.log("Ball collided with stone:", res.stoneMesh.name);
-          }
         }
 
         if (res.entered) {
-            // Log the ball velocity (vector and scalar speed)
+            // Log the ball velocity
             const speed = ball.velocity.length();
             console.log(
               "Ball velocity on collision:",
@@ -522,14 +475,13 @@ window.addEventListener("keydown", (e) => {
         updateLevelBanner();
         updateLevelStoneVisibility();
         removeWinAlert();
-        console.log("Reset. Strokes:", strokes, "Current level:", currentLevel);
       }
     }
   });  
 
 updateLevelBanner();
 
-// --- Resize ---
+// Resize
 window.addEventListener("resize", () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
